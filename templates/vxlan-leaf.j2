@@ -1,0 +1,123 @@
+{# Template to copy and paste config to leaf switch #}
+
+{# Set Hostname from hostvars #}
+hostname {{ hostname }}
+
+{# Configure required features for NX-OS to run VXLAN on leaf switch #}
+{% for name in feature | sort %}
+  feature {{ name.name }}
+{% endfor %}
+
+{# Enable nv overlay for leaf switches #}
+  nv overlay evpn
+
+{# Configure anycast gateway mac address #}
+fabric forwarding anycast-gateway-mac {{ anycastmac }}
+
+{# Configure Multicast for VXLAN leaf #}
+ip pim rp-address 1.2.3.4 group-list 224.0.0.0/4
+ip pim ssm range 232.0.0.0/8
+
+{# Sample VLANs configuration with VNI #}
+
+vlan 1
+vlan 20
+  vn-segment 160020
+  
+{# Configure VRF for VNI #}
+vrf context TENANT1
+  vni 160020
+  rd auto
+  address-family ipv4 unicast
+    route-target both auto
+    route-target both auto evpn
+
+{# Required TCAM changes in NXOSv to support VXLAN #}
+hardware access-list tcam region vpc-convergence 0
+hardware access-list tcam region arp-ether 256
+
+{# Sample Interface VLAN config #}
+interface Vlan20
+  no shutdown
+  vrf member TENANT1
+  ip address 10.1.20.254/24
+  fabric forwarding mode anycast-gateway
+
+{# Network Virtual Interface config - performs VXLAN encapsulation #}
+  interface nve1
+  no shutdown
+  host-reachability protocol bgp
+  source-interface loopback0
+  member vni 160020 mcast-group 239.0.0.1
+
+{# loopback config for ip unnumbered configuration #}
+interface loopback0
+  ip address {{ loopback_0_ip }}
+  ip router isis VXLAN_UNDERLAY
+  no isis hello-padding always
+  ip pim sparse-mode
+
+{# Macro to generate leaf uplink to spine interface configuration #}
+{% macro intf_leaf() -%} 
+  no switchport
+  mtu 9198
+  medium p2p
+  ip unnumbered loopback0
+{%- endmacro %}
+
+{# Macro to generate leaf interface to spine PIM and ISIS config #}
+{% macro intf_pimconfig() -%}
+  ip router isis VXLAN_UNDERLAY
+  no isis hello-padding always {# Required on NXOSv for ISIS Adjaceny to form m#}
+  ip pim sparse-mode
+{%- endmacro%}
+
+{#configure first 4 interfaces on NXOSv for leaf uploink to spine using above Macros #}
+
+{% for intf_num in range(1, 5) %}
+interface Ethernet1/{{ intf_num }}  
+  {{ intf_leaf() }}
+  {{ intf_pimconfig() }} 
+  no shutdown
+{% endfor %}
+
+{# Configure mgmt interface for NXOSv #}
+{#
+interface mgmt0
+  vrf member management
+  ip address {{ mgmt_ip }}
+#}
+
+{# ISIS configuration for VXLAN Underlay #}
+router isis VXLAN_UNDERLAY
+  log-adjacency-changes
+  net {{ isis_net }}
+  is-type level-1
+  address-family ipv4 unicast
+
+{# BGP configuration for VXLAN EVPN #}
+router bgp {{ asn }}
+  address-family ipv4 unicast
+  address-family l2vpn evpn
+    retain route-target all
+  template peer VXLAN_SPINE
+    remote-as {{ asn }}
+    update-source loopback0
+    address-family ipv4 unicast
+      send-community extended
+      soft-reconfiguration inbound
+    address-family l2vpn evpn
+      send-community
+      send-community extended
+  neighbor 192.168.0.1
+    inherit peer VXLAN_SPINE
+  neighbor 192.168.0.2
+    inherit peer VXLAN_SPINE
+  vrf TENANT1  
+    address-family ipv4 unicast                                                                     
+      advertise l2vpn evpn
+  evpn                                         
+    vni 160020 l2
+      rd auto
+      route-target import auto
+      route-target export auto

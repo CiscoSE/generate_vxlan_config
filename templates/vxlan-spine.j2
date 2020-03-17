@@ -1,0 +1,100 @@
+{# Configure hostname from host_vars #}
+hostname {{ hostname }}
+
+{# Configure features required for VXLAN Spine #}
+{% for name in feature | sort %}
+  feature {{ name.name }}
+{% endfor %}
+
+{# Enable evpn overlay #}
+nv overlay evpn
+
+{# Spine interface macro #}
+{% macro intf_spine() -%} 
+  no switchport
+  mtu 9198
+  medium p2p
+  ip unnumbered loopback0
+{%- endmacro %}
+
+{# Multicast PIM and ISIS configuration for interfaces #}
+{% macro intf_pimconfig() -%}
+  ip router isis VXLAN_UNDERLAY
+  no isis hello-padding always
+  ip pim sparse-mode
+{%- endmacro%}
+
+{#Configure ISIS/BGP ip unnumbered loopback interface #}
+interface loopback0
+  ip address {{ loopback_0_ip }}
+  {{ intf_pimconfig() }}
+
+{# Configure loopback for multicast #}
+interface loopback1
+  ip address {{ loopback_1_ip }}
+  {{ intf_pimconfig() }}
+
+{# Configure interfaces using macros above #}
+interface Ethernet1/1
+  {{ intf_spine() }}
+  {{ intf_pimconfig() }} 
+  no shutdown
+
+interface Ethernet1/2
+  {{ intf_spine() }}
+  {{ intf_pimconfig() }}
+  no shutdown
+
+interface Ethernet1/3
+  {{ intf_spine() }}
+  {{ intf_pimconfig() }}
+  no shutdown
+
+interface Ethernet1/4
+  {{ intf_spine() }}
+  {{ intf_pimconfig() }}
+  no shutdown
+
+{# Configure NXOSv management interface #)
+interface mgmt0
+  vrf member management
+  ip address {{ mgmt_ip }}
+
+{# Configure multicast #}
+ip pim rp-address 1.2.3.4 group-list 224.0.0.0/4
+ip pim ssm range 232.0.0.0/8
+ip pim anycast-rp 192.168.0.1 1.2.3.4
+ip pim anycast-rp 192.168.0.2 1.2.3.4
+
+{# Configure ISIS underlay #}
+router isis VXLAN_UNDERLAY
+  log-adjacency-changes
+  net {{ isis_net }}
+  is-type level-1
+  address-family ipv4 unicast
+{# Configure BGP Overlay #}
+router bgp {{ asn }}
+  address-family ipv4 unicast
+  address-family l2vpn evpn
+    retain route-target all
+  template peer VXLAN_LEAF
+    remote-as {{ asn }}
+    update-source loopback0
+    address-family ipv4 unicast
+      send-community extended
+      route-reflector-client
+      soft-reconfiguration inbound
+    address-family l2vpn evpn
+      send-community
+      send-community extended
+      route-reflector-client
+  neighbor 192.168.0.3
+    inherit peer VXLAN_LEAF
+  neighbor 192.168.0.4
+    inherit peer VXLAN_LEAF
+  neighbor 192.168.0.5
+    inherit peer VXLAN_LEAF
+  neighbor 192.168.0.6
+    inherit peer VXLAN_LEAF
+
+

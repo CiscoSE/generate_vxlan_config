@@ -1,0 +1,5 @@
+hostname: n9kv-s2
+loopback_0_ip: 192.168.0.2/24
+loopback_1_ip: 1.2.3.4/32
+mgmt_ip: 10.255.0.111/24
+isis_net: 49.9500.1921.6800.0002.00

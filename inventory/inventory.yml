@@ -1,0 +1,12 @@
+all:
+  children:
+    spines:
+      hosts:
+        n9kv-s1:
+        n9kv-s2:
+    leafs:
+      hosts:
+        n9kv-l1:
+        n9kv-l2:
+        n9kv-l3:
+        n9kv-l4:

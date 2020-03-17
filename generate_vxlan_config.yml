@@ -1,0 +1,32 @@
+---
+- name: Generate NX-OS VXLAN Fabric Spine configurations
+  connection: local
+  hosts: spines
+  tasks:
+    - name: "Delete old config files"
+      file:
+        path: "./configurations/vxlan_spine_{{ inventory_hostname }}.txt"
+        state: absent
+      tags: generate_cfgs
+
+    - name: Generate Spine Configs
+      template: 
+        src: ./templates/vxlan-spine.j2
+        dest: "./configurations/vxlan_spine_{{ inventory_hostname }}.txt"
+      tags: generate_cfgs
+
+- name: Generate NX-OS VXLAN Fabric Leaf configurations
+  connection: local
+  hosts: leafs
+  tasks:
+    - name: "Delete old config files"
+      file:
+        path: "./configurations/vxlan_leaf_{{ inventory_hostname }}.txt"
+        state: absent
+      tags: generate_cfgs
+
+    - name: Generate Leaf Configs
+      template: 
+        src: ./templates/vxlan-leaf.j2
+        dest: "./configurations/vxlan_leaf_{{ inventory_hostname }}.txt"
+      tags: generate_cfgs

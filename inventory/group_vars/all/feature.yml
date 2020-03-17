@@ -1,0 +1,8 @@
+feature:
+  - name: isis
+  - name: bgp
+  - name: pim
+  - name: fabric forwarding
+  - name: interface-vlan
+  - name: vn-segment-vlan-based
+  - name: nv overlay
